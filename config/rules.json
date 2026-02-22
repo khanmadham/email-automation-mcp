@@ -1,0 +1,67 @@
+{
+  "ignore_rules": {
+    "ignore_senders": [
+      "no-reply@google.com",
+      "accounts.google.com",
+      "linkedin.com",
+      "instagram.com",
+      "notification@",
+      "noreply@",
+      "updates@"
+    ],
+    "ignore_subject_contains": [
+      "security alert",
+      "verify",
+      "notification",
+      "alert",
+      "password",
+      "login"
+    ],
+    "auto_reply_only_if": [
+      "inbox",
+      "human"
+    ]
+  },
+  "rules": [
+    {
+      "id": "support_inquiries",
+      "name": "Support Inquiry Auto-Reply",
+      "enabled": true,
+      "conditions": {
+        "keywords": ["help", "support", "issue", "problem"],
+        "mustMatch": "any"
+      },
+      "context": "This is a customer support inquiry"
+    },
+    {
+      "id": "meeting_requests",
+      "name": "Meeting Request Auto-Reply",
+      "enabled": true,
+      "conditions": {
+        "keywords": ["meeting", "call", "schedule", "available"],
+        "mustMatch": "any"
+      },
+      "context": "This is a meeting or scheduling request"
+    },
+    {
+      "id": "sales_inquiries",
+      "name": "Sales Inquiry Auto-Reply",
+      "enabled": true,
+      "conditions": {
+        "keywords": ["pricing", "cost", "plans", "subscribe", "features"],
+        "mustMatch": "any"
+      },
+      "context": "This is a sales or pricing inquiry"
+    },
+    {
+      "id": "feedback",
+      "name": "Feedback Auto-Reply",
+      "enabled": false,
+      "conditions": {
+        "keywords": ["feedback", "suggestion", "improvement"],
+        "mustMatch": "any"
+      },
+      "context": "This is user feedback or a suggestion"
+    }
+  ]
+}
