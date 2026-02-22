@@ -10,23 +10,32 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-// Validate environment variables
+// Validate environment variables - only enforce in production
 function validateEnvironment() {
   const requiredVars = [
     'GMAIL_CLIENT_ID',
     'GMAIL_CLIENT_SECRET',
-    'OPENAI_API_KEY',
   ];
 
   const missing = requiredVars.filter((v) => !process.env[v]);
 
   if (missing.length > 0) {
-    logger.error(
-      `Missing required environment variables: ${missing.join(', ')}`
+    logger.warn(
+      `Warning: Missing Gmail credentials: ${missing.join(', ')}`
     );
-    logger.error('Please copy .env.example to .env and fill in the required values');
-    process.exit(1);
+    logger.info('The system will start but email processing will be unavailable until credentials are configured.');
+    logger.info('To set up credentials, run: npm run setup');
+    return false;
   }
+
+  // Check for OpenAI API key
+  if (!process.env.OPENAI_API_KEY) {
+    logger.error('Missing required environment variable: OPENAI_API_KEY');
+    logger.error('Please add OPENAI_API_KEY to your .env file');
+    return false;
+  }
+
+  return true;
 }
 
 /**
@@ -37,25 +46,30 @@ async function start() {
     logger.info('=== Email Automation System Starting ===');
 
     // Validate environment
-    validateEnvironment();
+    const credentialsConfigured = validateEnvironment();
 
-    // Initialize Gmail service
-    logger.info('Initializing Gmail service...');
-    await initializeGmailService();
-    logger.info('Gmail service initialized successfully');
+    if (credentialsConfigured) {
+      // Initialize Gmail service
+      logger.info('Initializing Gmail service...');
+      await initializeGmailService();
+      logger.info('Gmail service initialized successfully');
 
-    // Get processing interval from env
-    const intervalMinutes = parseInt(
-      process.env.PROCESSING_INTERVAL_MINUTES || '5',
-      10
-    );
+      // Get processing interval from env
+      const intervalMinutes = parseInt(
+        process.env.PROCESSING_INTERVAL_MINUTES || '5',
+        10
+      );
 
-    // Start the scheduler
-    startScheduler(intervalMinutes);
+      // Start the scheduler
+      startScheduler(intervalMinutes);
 
-    logger.info(
-      `Email automation system started successfully. Processing emails every ${intervalMinutes} minute(s)`
-    );
+      logger.info(
+        `Email automation system started successfully. Processing emails every ${intervalMinutes} minute(s)`
+      );
+    } else {
+      logger.warn('Starting in degraded mode - waiting for credential configuration');
+      logger.info('Once credentials are configured, restart the application to begin processing emails');
+    }
   } catch (error) {
     logger.error(`Failed to start email automation: ${error.message}`);
     process.exit(1);
