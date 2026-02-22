@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { initializeGmailService } from './gmail/emailService.js';
 import { startScheduler, stopScheduler } from './scheduler/cronScheduler.js';
+import { startServer } from './server.js';
 import { logger } from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,6 +45,9 @@ function validateEnvironment() {
 async function start() {
   try {
     logger.info('=== Email Automation System Starting ===');
+
+    // Start web server (required for Railway and other platforms)
+    await startServer();
 
     // Validate environment
     const credentialsConfigured = validateEnvironment();
