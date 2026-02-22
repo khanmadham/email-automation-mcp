@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { initializeGmailService } from './gmail/emailService.js';
 import { startScheduler, stopScheduler } from './scheduler/cronScheduler.js';
 import { startServer } from './server.js';
+import { initializeMCPServer, startStdioTransport } from './mcp/handler.js';
 import { logger } from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -46,8 +47,20 @@ async function start() {
   try {
     logger.info('=== Email Automation System Starting ===');
 
+    // Initialize MCP Server (before starting HTTP server for proper initialization)
+    logger.info('Initializing MCP Server...');
+    await initializeMCPServer();
+    logger.info('MCP Server initialized');
+
     // Start web server (required for Railway and other platforms)
     await startServer();
+
+    // Start MCP stdio transport (for Claude Desktop / CLI)
+    try {
+      await startStdioTransport();
+    } catch (error) {
+      logger.warn(`MCP stdio transport not available (expected if not used): ${error.message}`);
+    }
 
     // Validate environment
     const credentialsConfigured = validateEnvironment();
@@ -74,6 +87,12 @@ async function start() {
       logger.warn('Starting in degraded mode - waiting for credential configuration');
       logger.info('Once credentials are configured, restart the application to begin processing emails');
     }
+
+    logger.info('=== System Ready ===');
+    logger.info('MCP Transports:');
+    logger.info('  - Stdio (Claude Desktop / Claude Code CLI): Ready');
+    logger.info('  - HTTP POST /mcp: Ready (n8n, Postman, etc.)');
+    logger.info('  - SSE GET /mcp/sse: Ready (Real-time events)');
   } catch (error) {
     logger.error(`Failed to start email automation: ${error.message}`);
     process.exit(1);
@@ -110,3 +129,4 @@ process.on('unhandledRejection', (reason) => {
 // Start the application
 setupGracefulShutdown();
 start();
+
