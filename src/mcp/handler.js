@@ -1,8 +1,9 @@
-import { Server, Tool, Resource, Prompt, TextContent, ErrorCode } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { z } from 'zod';
 import { getUnreadEmails, getEmailDetails, sendReply, markAsRead, addLabel } from '../gmail/emailService.js';
 import { processBatch } from '../processor/emailProcessor.js';
-import { getSchedulerStatus, stopScheduler, startScheduler } from '../scheduler/cronScheduler.js';
+import { getSchedulerStatus } from '../scheduler/cronScheduler.js';
 import { logger } from '../utils/logger.js';
 import fs from 'fs';
 import path from 'path';
@@ -11,12 +12,10 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load configuration files
 const rulesPath = path.resolve(__dirname, '../../config/rules.json');
 const settingsPath = path.resolve(__dirname, '../../config/settings.json');
 
 let mcp_server = null;
-let stdio_transport = null;
 let processing_stats = {
   total_processed: 0,
   total_skipped: 0,
@@ -30,18 +29,13 @@ let processing_stats = {
  */
 export async function initializeMCPServer() {
   try {
-    mcp_server = new Server({
+    mcp_server = new McpServer({
       name: 'email-automation-mcp',
       version: '1.0.0',
     });
 
-    // Register tools
     registerTools();
-
-    // Register resources
     registerResources();
-
-    // Register prompts
     registerPrompts();
 
     logger.info('MCP Server initialized successfully');
@@ -56,22 +50,17 @@ export async function initializeMCPServer() {
  * Register all MCP tools
  */
 function registerTools() {
-  mcp_server.tool(
+  mcp_server.registerTool(
     'get_unread_emails',
-    'Fetch unread emails from the inbox',
     {
-      type: 'object',
-      properties: {
-        max_results: {
-          type: 'number',
-          description: 'Maximum number of emails to fetch (default: 10)',
-        },
-      },
+      description: 'Fetch unread emails from the inbox',
+      inputSchema: z.object({
+        max_results: z.number().default(10).describe('Maximum number of emails to fetch'),
+      }),
     },
     async (params) => {
       try {
-        const maxResults = params.max_results || 10;
-        const emails = await getUnreadEmails(maxResults);
+        const emails = await getUnreadEmails(params.max_results || 10);
         return {
           content: [
             {
@@ -107,18 +96,13 @@ function registerTools() {
     }
   );
 
-  mcp_server.tool(
+  mcp_server.registerTool(
     'get_email',
-    'Get full details of a specific email',
     {
-      type: 'object',
-      properties: {
-        message_id: {
-          type: 'string',
-          description: 'The Gmail message ID',
-        },
-      },
-      required: ['message_id'],
+      description: 'Get full details of a specific email',
+      inputSchema: z.object({
+        message_id: z.string().describe('The Gmail message ID'),
+      }),
     },
     async (params) => {
       try {
@@ -146,22 +130,14 @@ function registerTools() {
     }
   );
 
-  mcp_server.tool(
+  mcp_server.registerTool(
     'send_reply',
-    'Send a reply to an email',
     {
-      type: 'object',
-      properties: {
-        message_id: {
-          type: 'string',
-          description: 'The Gmail message ID to reply to',
-        },
-        reply_text: {
-          type: 'string',
-          description: 'The reply message text',
-        },
-      },
-      required: ['message_id', 'reply_text'],
+      description: 'Send a reply to an email',
+      inputSchema: z.object({
+        message_id: z.string().describe('The Gmail message ID to reply to'),
+        reply_text: z.string().describe('The reply message text'),
+      }),
     },
     async (params) => {
       try {
@@ -189,18 +165,13 @@ function registerTools() {
     }
   );
 
-  mcp_server.tool(
+  mcp_server.registerTool(
     'mark_as_read',
-    'Mark an email as read',
     {
-      type: 'object',
-      properties: {
-        message_id: {
-          type: 'string',
-          description: 'The Gmail message ID',
-        },
-      },
-      required: ['message_id'],
+      description: 'Mark an email as read',
+      inputSchema: z.object({
+        message_id: z.string().describe('The Gmail message ID'),
+      }),
     },
     async (params) => {
       try {
@@ -228,22 +199,14 @@ function registerTools() {
     }
   );
 
-  mcp_server.tool(
+  mcp_server.registerTool(
     'add_label',
-    'Add a label to an email',
     {
-      type: 'object',
-      properties: {
-        message_id: {
-          type: 'string',
-          description: 'The Gmail message ID',
-        },
-        label_name: {
-          type: 'string',
-          description: 'The label name to add',
-        },
-      },
-      required: ['message_id', 'label_name'],
+      description: 'Add a label to an email',
+      inputSchema: z.object({
+        message_id: z.string().describe('The Gmail message ID'),
+        label_name: z.string().describe('The label name to add'),
+      }),
     },
     async (params) => {
       try {
@@ -271,10 +234,12 @@ function registerTools() {
     }
   );
 
-  mcp_server.tool(
+  mcp_server.registerTool(
     'process_emails_now',
-    'Trigger immediate batch processing of unread emails',
-    {},
+    {
+      description: 'Trigger immediate batch processing of unread emails',
+      inputSchema: z.object({}),
+    },
     async () => {
       try {
         const emails = await getUnreadEmails();
@@ -319,22 +284,14 @@ function registerTools() {
     }
   );
 
-  mcp_server.tool(
+  mcp_server.registerTool(
     'toggle_rule',
-    'Enable or disable an email processing rule',
     {
-      type: 'object',
-      properties: {
-        rule_id: {
-          type: 'string',
-          description: 'The rule ID to toggle',
-        },
-        enabled: {
-          type: 'boolean',
-          description: 'Whether to enable or disable the rule',
-        },
-      },
-      required: ['rule_id', 'enabled'],
+      description: 'Enable or disable an email processing rule',
+      inputSchema: z.object({
+        rule_id: z.string().describe('The rule ID to toggle'),
+        enabled: z.boolean().describe('Whether to enable or disable the rule'),
+      }),
     },
     async (params) => {
       try {
@@ -381,27 +338,15 @@ function registerTools() {
     }
   );
 
-  mcp_server.tool(
+  mcp_server.registerTool(
     'update_rule',
-    'Update a rule\'s keywords or context',
     {
-      type: 'object',
-      properties: {
-        rule_id: {
-          type: 'string',
-          description: 'The rule ID to update',
-        },
-        keywords: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'New keywords for the rule',
-        },
-        context: {
-          type: 'string',
-          description: 'New context description for the rule',
-        },
-      },
-      required: ['rule_id'],
+      description: "Update a rule's keywords or context",
+      inputSchema: z.object({
+        rule_id: z.string().describe('The rule ID to update'),
+        keywords: z.array(z.string()).optional().describe('New keywords for the rule'),
+        context: z.string().optional().describe('New context description for the rule'),
+      }),
     },
     async (params) => {
       try {
@@ -428,7 +373,6 @@ function registerTools() {
         }
 
         fs.writeFileSync(rulesPath, JSON.stringify(rules, null, 2));
-
         logger.info(`Rule "${params.rule_id}" updated`);
 
         return {
@@ -454,10 +398,12 @@ function registerTools() {
     }
   );
 
-  mcp_server.tool(
+  mcp_server.registerTool(
     'get_system_status',
-    'Get the current system and scheduler status',
-    {},
+    {
+      description: 'Get the current system and scheduler status',
+      inputSchema: z.object({}),
+    },
     async () => {
       try {
         const status = getSchedulerStatus();
@@ -493,10 +439,12 @@ function registerTools() {
     }
   );
 
-  mcp_server.tool(
+  mcp_server.registerTool(
     'get_statistics',
-    'Get email processing statistics',
-    {},
+    {
+      description: 'Get email processing statistics',
+      inputSchema: z.object({}),
+    },
     async () => {
       try {
         return {
@@ -527,16 +475,21 @@ function registerTools() {
  * Register all MCP resources
  */
 function registerResources() {
-  mcp_server.resource(
+  mcp_server.registerResource(
     'emails/unread',
-    'List of unread emails',
+    'resource://emails/unread',
+    {
+      name: 'Unread Emails',
+      description: 'List of unread emails',
+      mimeType: 'application/json',
+    },
     async () => {
       try {
         const emails = await getUnreadEmails(100);
         return {
           contents: [
             {
-              uri: 'emails/unread',
+              uri: 'resource://emails/unread',
               mimeType: 'application/json',
               text: JSON.stringify(
                 {
@@ -561,39 +514,21 @@ function registerResources() {
     }
   );
 
-  mcp_server.resource(
-    'emails/{messageId}',
-    'Full details of a specific email',
-    async (uri) => {
-      try {
-        const messageId = uri.split('/')[1];
-        const email = await getEmailDetails(messageId);
-        return {
-          contents: [
-            {
-              uri: uri,
-              mimeType: 'application/json',
-              text: JSON.stringify(email, null, 2),
-            },
-          ],
-        };
-      } catch (error) {
-        logger.error(`Error reading email resource: ${error.message}`);
-        throw error;
-      }
-    }
-  );
-
-  mcp_server.resource(
+  mcp_server.registerResource(
     'rules',
-    'Email processing rules configuration',
+    'resource://rules',
+    {
+      name: 'Processing Rules',
+      description: 'Email processing rules configuration',
+      mimeType: 'application/json',
+    },
     async () => {
       try {
         const rules = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
         return {
           contents: [
             {
-              uri: 'rules',
+              uri: 'resource://rules',
               mimeType: 'application/json',
               text: JSON.stringify(rules, null, 2),
             },
@@ -606,16 +541,21 @@ function registerResources() {
     }
   );
 
-  mcp_server.resource(
+  mcp_server.registerResource(
     'settings',
-    'System settings and configuration',
+    'resource://settings',
+    {
+      name: 'System Settings',
+      description: 'System settings and configuration',
+      mimeType: 'application/json',
+    },
     async () => {
       try {
         const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
         return {
           contents: [
             {
-              uri: 'settings',
+              uri: 'resource://settings',
               mimeType: 'application/json',
               text: JSON.stringify(settings, null, 2),
             },
@@ -628,16 +568,21 @@ function registerResources() {
     }
   );
 
-  mcp_server.resource(
+  mcp_server.registerResource(
     'status',
-    'Real-time system health and scheduler status',
+    'resource://status',
+    {
+      name: 'System Status',
+      description: 'Real-time system health and scheduler status',
+      mimeType: 'application/json',
+    },
     async () => {
       try {
         const schedulerStatus = getSchedulerStatus();
         return {
           contents: [
             {
-              uri: 'status',
+              uri: 'resource://status',
               mimeType: 'application/json',
               text: JSON.stringify(
                 {
@@ -665,72 +610,87 @@ function registerResources() {
  * Register all MCP prompts
  */
 function registerPrompts() {
-  mcp_server.prompt(
+  mcp_server.registerPrompt(
     'email_analysis_workflow',
-    'How to analyze and respond to emails using this email automation system',
+    {
+      description: 'How to analyze and respond to emails using this email automation system',
+    },
     async () => {
       return {
         messages: [
           {
             role: 'user',
-            content:
-              'You are an email automation assistant. Here is your workflow:\n\n' +
-              '1. **Check Unread Emails**: Use get_unread_emails to see what needs attention\n' +
-              '2. **Analyze Content**: Use get_email to read full email details\n' +
-              '3. **Match Rules**: Check the rules resource to understand which rules apply\n' +
-              '4. **Generate Response**: Create a personalized response based on the email content and applicable rules\n' +
-              '5. **Send Reply**: Use send_reply to send your response\n' +
-              '6. **Update Status**: Use mark_as_read and add_label to track processing\n\n' +
-              'Example workflow: Get unread emails → Find a sales inquiry matching the sales_inquiries rule → Generate a response about pricing → Send the reply → Mark as read',
+            content: {
+              type: 'text',
+              text:
+                'You are an email automation assistant. Here is your workflow:\n\n' +
+                '1. **Check Unread Emails**: Use get_unread_emails to see what needs attention\n' +
+                '2. **Analyze Content**: Use get_email to read full email details\n' +
+                '3. **Match Rules**: Check the rules resource to understand which rules apply\n' +
+                '4. **Generate Response**: Create a personalized response based on the email content and applicable rules\n' +
+                '5. **Send Reply**: Use send_reply to send your response\n' +
+                '6. **Update Status**: Use mark_as_read and add_label to track processing\n\n' +
+                'Example workflow: Get unread emails → Find a sales inquiry matching the sales_inquiries rule → Generate a response about pricing → Send the reply → Mark as read',
+            },
           },
         ],
       };
     }
   );
 
-  mcp_server.prompt(
+  mcp_server.registerPrompt(
     'rule_management',
-    'How to configure and manage email processing rules',
+    {
+      description: 'How to configure and manage email processing rules',
+    },
     async () => {
       return {
         messages: [
           {
             role: 'user',
-            content:
-              'To manage email processing rules:\n\n' +
-              '1. **View Rules**: Use the rules resource to see current configuration\n' +
-              '2. **Enable/Disable**: Use toggle_rule to turn rules on or off\n' +
-              '3. **Update Keywords**: Use update_rule to change keywords that trigger a rule\n' +
-              '4. **Update Context**: Use update_rule to change the context description\n\n' +
-              'Current available rules:\n' +
-              '- support_inquiries: Triggered by keywords like help, support, issue, problem\n' +
-              '- meeting_requests: Triggered by keywords like meeting, call, schedule, available\n' +
-              '- sales_inquiries: Triggered by keywords like pricing, cost, plans, subscribe, features\n' +
-              '- feedback: Triggered by keywords like feedback, suggestion, improvement',
+            content: {
+              type: 'text',
+              text:
+                'To manage email processing rules:\n\n' +
+                '1. **View Rules**: Use the rules resource to see current configuration\n' +
+                '2. **Enable/Disable**: Use toggle_rule to turn rules on or off\n' +
+                '3. **Update Keywords**: Use update_rule to change keywords that trigger a rule\n' +
+                '4. **Update Context**: Use update_rule to change the context description\n\n' +
+                'Current available rules:\n' +
+                '- support_inquiries: Triggered by keywords like help, support, issue, problem\n' +
+                '- meeting_requests: Triggered by keywords like meeting, call, schedule, available\n' +
+                '- sales_inquiries: Triggered by keywords like pricing, cost, plans, subscribe, features\n' +
+                '- feedback: Triggered by keywords like feedback, suggestion, improvement',
+            },
           },
         ],
       };
     }
   );
 
-  mcp_server.prompt(
+  mcp_server.registerPrompt(
     'automation_best_practices',
-    'Best practices for email automation using OpenAI and Gmail',
+    {
+      description: 'Best practices for email automation using OpenAI and Gmail',
+    },
     async () => {
       return {
         messages: [
           {
             role: 'user',
-            content:
-              'Best practices for email automation:\n\n' +
-              '1. **Be Specific**: Use clear keywords that accurately reflect email intent\n' +
-              '2. **Personalize**: Always include sender name and relevant context in responses\n' +
-              '3. **Review First**: Check emails before activating auto-reply for new rule types\n' +
-              '4. **Monitor**: Use get_statistics to track automation effectiveness\n' +
-              '5. **Avoid Loops**: The system ignores no-reply addresses to prevent loops\n' +
-              '6. **User Privacy**: Never share sensitive information in auto-replies\n' +
-              '7. **Test Rules**: Use toggle_rule to test new rules before enabling permanently\n' +
-              '8. **Keep Context Short**: Brief rules context helps AI generate better responses',
+            content: {
+              type: 'text',
+              text:
+                'Best practices for email automation:\n\n' +
+                '1. **Be Specific**: Use clear keywords that accurately reflect email intent\n' +
+                '2. **Personalize**: Always include sender name and relevant context in responses\n' +
+                '3. **Review First**: Check emails before activating auto-reply for new rule types\n' +
+                '4. **Monitor**: Use get_statistics to track automation effectiveness\n' +
+                '5. **Avoid Loops**: The system ignores no-reply addresses to prevent loops\n' +
+                '6. **User Privacy**: Never share sensitive information in auto-replies\n' +
+                '7. **Test Rules**: Use toggle_rule to test new rules before enabling permanently\n' +
+                '8. **Keep Context Short**: Brief rules context helps AI generate better responses',
+            },
           },
         ],
       };
@@ -743,9 +703,10 @@ function registerPrompts() {
  */
 export async function startStdioTransport() {
   try {
-    stdio_transport = new StdioServerTransport();
-    await mcp_server.connect(stdio_transport);
-    logger.info('MCP Stdio transport started (Claude Desktop / CLI compatible)');
+    const transport = new StdioServerTransport();
+    await mcp_server.connect(transport);
+    // Use stderr for logging to avoid interfering with JSON-RPC protocol
+    console.error('MCP Stdio transport started (Claude Desktop / CLI compatible)');
   } catch (error) {
     logger.error(`Failed to start MCP stdio transport: ${error.message}`);
     throw error;
@@ -760,7 +721,7 @@ export function getMCPServer() {
 }
 
 /**
- * Update processing statistics (called by scheduler)
+ * Update processing statistics
  */
 export function updateProcessingStats(stats) {
   processing_stats.total_processed += stats.processed || 0;
