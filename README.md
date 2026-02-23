@@ -71,6 +71,36 @@ The system will initialize and begin processing emails at the configured interva
 
 ---
 
+## 🔌 Connecting Claude Desktop (MCP)
+
+The server exposes a **Streamable HTTP MCP transport** at `http://localhost:3000/mcp`.
+
+### Step 1 — Start the server
+
+```bash
+npm start
+```
+
+### Step 2 — Add to Claude Desktop
+
+Open **Claude Desktop → Settings → Developer → Edit Config** and add:
+
+```json
+{
+  "mcpServers": {
+    "email-automation": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+Save the file and **restart Claude Desktop**. The MCP server will appear in Claude's tools panel.
+
+> **Note:** If you were previously seeing *"There was an error connecting to the MCP server"*, this was because the server only supported stdio transport and had no HTTP MCP endpoint. The `/mcp` HTTP endpoint has now been added.
+
+---
+
 ## 🏗️ Architecture
 
 ### Processing Pipeline

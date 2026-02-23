@@ -3,12 +3,14 @@ import { processUnreadEmails } from '../processor/emailProcessor.js';
 import { logger } from '../utils/logger.js';
 
 let scheduledTask = null;
+let currentIntervalMinutes = 5;
 
 /**
  * Start the email processing scheduler
  */
 export function startScheduler(intervalMinutes = 5) {
   try {
+    currentIntervalMinutes = intervalMinutes;
     // Convert minutes to cron format (every N minutes)
     const cronExpression = `*/${intervalMinutes} * * * *`;
 
@@ -66,4 +68,14 @@ export function stopScheduler() {
  */
 export function isSchedulerRunning() {
   return scheduledTask !== null;
+}
+
+/**
+ * Get scheduler status
+ */
+export function getSchedulerStatus() {
+  return {
+    running: scheduledTask !== null,
+    interval_minutes: currentIntervalMinutes,
+  };
 }

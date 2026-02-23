@@ -25,7 +25,7 @@ let processing_stats = {
 };
 
 /**
- * Initialize MCP Server with tools, resources, and prompts
+ * Initialize MCP Server with tools, resources, and prompts (singleton for stdio)
  */
 export async function initializeMCPServer() {
   try {
@@ -34,9 +34,9 @@ export async function initializeMCPServer() {
       version: '1.0.0',
     });
 
-    registerTools();
-    registerResources();
-    registerPrompts();
+    registerTools(mcp_server);
+    registerResources(mcp_server);
+    registerPrompts(mcp_server);
 
     logger.info('MCP Server initialized successfully');
     return mcp_server;
@@ -47,9 +47,23 @@ export async function initializeMCPServer() {
 }
 
 /**
+ * Create a fresh MCP Server instance (for HTTP sessions)
+ */
+export async function createFreshMCPServer() {
+  const server = new McpServer({
+    name: 'email-automation-mcp',
+    version: '1.0.0',
+  });
+  registerTools(server);
+  registerResources(server);
+  registerPrompts(server);
+  return server;
+}
+
+/**
  * Register all MCP tools
  */
-function registerTools() {
+function registerTools(mcp_server) {
   mcp_server.registerTool(
     'get_unread_emails',
     {
@@ -474,7 +488,7 @@ function registerTools() {
 /**
  * Register all MCP resources
  */
-function registerResources() {
+function registerResources(mcp_server) {
   mcp_server.registerResource(
     'emails/unread',
     'resource://emails/unread',
@@ -609,7 +623,7 @@ function registerResources() {
 /**
  * Register all MCP prompts
  */
-function registerPrompts() {
+function registerPrompts(mcp_server) {
   mcp_server.registerPrompt(
     'email_analysis_workflow',
     {
