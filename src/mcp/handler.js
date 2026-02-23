@@ -25,19 +25,26 @@ let processing_stats = {
 };
 
 /**
+ * Create and configure a new MCP server instance with all tools, resources, and prompts.
+ * Use this factory when you need a fresh server instance (e.g., for each HTTP session).
+ */
+export function createMcpServerInstance() {
+  const server = new McpServer({
+    name: 'email-automation-mcp',
+    version: '1.0.0',
+  });
+  _registerTools(server);
+  _registerResources(server);
+  _registerPrompts(server);
+  return server;
+}
+
+/**
  * Initialize MCP Server with tools, resources, and prompts
  */
 export async function initializeMCPServer() {
   try {
-    mcp_server = new McpServer({
-      name: 'email-automation-mcp',
-      version: '1.0.0',
-    });
-
-    registerTools();
-    registerResources();
-    registerPrompts();
-
+    mcp_server = createMcpServerInstance();
     logger.info('MCP Server initialized successfully');
     return mcp_server;
   } catch (error) {
@@ -47,9 +54,9 @@ export async function initializeMCPServer() {
 }
 
 /**
- * Register all MCP tools
+ * Register all MCP tools on a given server instance
  */
-function registerTools() {
+function _registerTools(mcp_server) {
   mcp_server.registerTool(
     'get_unread_emails',
     {
@@ -474,7 +481,7 @@ function registerTools() {
 /**
  * Register all MCP resources
  */
-function registerResources() {
+function _registerResources(mcp_server) {
   mcp_server.registerResource(
     'emails/unread',
     'resource://emails/unread',
@@ -609,7 +616,7 @@ function registerResources() {
 /**
  * Register all MCP prompts
  */
-function registerPrompts() {
+function _registerPrompts(mcp_server) {
   mcp_server.registerPrompt(
     'email_analysis_workflow',
     {

@@ -1,6 +1,8 @@
 import express from 'express';
+import { randomUUID } from 'crypto';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { logger } from './utils/logger.js';
-import { getMCPServer } from './mcp/handler.js';
+import { getMCPServer, createMcpServerInstance } from './mcp/handler.js';
 import { getUnreadEmails, getEmailDetails, sendReply, markAsRead, addLabel } from './gmail/emailService.js';
 import { processBatch } from './processor/emailProcessor.js';
 import { getSchedulerStatus } from './scheduler/cronScheduler.js';
@@ -16,6 +18,9 @@ const settingsPath = path.resolve(__dirname, '../config/settings.json');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Active MCP HTTP sessions: sessionId -> { server, transport }
+const mcpSessions = new Map();
 
 // Middleware
 app.use(express.json());
@@ -38,11 +43,87 @@ app.get('/', (req, res) => {
     mcp: {
       enabled: true,
       endpoints: {
+        http: 'POST/GET/DELETE /mcp (Streamable HTTP — Claude connector, n8n, etc.)',
         stdio: 'stdin/stdout (Claude Desktop / Claude Code CLI)',
-        info: 'Use Claude Desktop or Claude Code CLI to access MCP tools and resources',
+        info: 'GET /mcp/info',
       },
     },
   });
+});
+
+// ============================================
+// MCP Streamable HTTP Transport (Claude connector)
+// Handles POST /mcp (new session or message), GET /mcp (SSE stream), DELETE /mcp (close session)
+// ============================================
+
+app.post('/mcp', async (req, res) => {
+  try {
+    const sessionId = req.headers['mcp-session-id'];
+    let transport;
+
+    if (sessionId && mcpSessions.has(sessionId)) {
+      // Reuse existing session transport
+      transport = mcpSessions.get(sessionId).transport;
+    } else if (!sessionId) {
+      // New session — create a fresh server + transport pair
+      const server = createMcpServerInstance();
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sid) => {
+          mcpSessions.set(sid, { server, transport });
+          logger.info(`MCP HTTP session initialized: ${sid}`);
+        },
+      });
+      transport.onclose = () => {
+        if (transport.sessionId) {
+          mcpSessions.delete(transport.sessionId);
+          logger.info(`MCP HTTP session closed: ${transport.sessionId}`);
+        }
+      };
+      await server.connect(transport);
+    } else {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    logger.error(`MCP POST error: ${error.message}`);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+});
+
+app.get('/mcp', async (req, res) => {
+  try {
+    const sessionId = req.headers['mcp-session-id'];
+    if (!sessionId || !mcpSessions.has(sessionId)) {
+      return res.status(400).json({ error: 'Invalid or missing mcp-session-id' });
+    }
+    const { transport } = mcpSessions.get(sessionId);
+    await transport.handleRequest(req, res);
+  } catch (error) {
+    logger.error(`MCP GET error: ${error.message}`);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+});
+
+app.delete('/mcp', async (req, res) => {
+  try {
+    const sessionId = req.headers['mcp-session-id'];
+    if (sessionId && mcpSessions.has(sessionId)) {
+      const { transport } = mcpSessions.get(sessionId);
+      await transport.close();
+      mcpSessions.delete(sessionId);
+      logger.info(`MCP HTTP session deleted: ${sessionId}`);
+    }
+    res.status(204).end();
+  } catch (error) {
+    logger.error(`MCP DELETE error: ${error.message}`);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Simple MCP info endpoint for HTTP clients
